@@ -39,34 +39,31 @@ int main(void)
 void hrtimInit(void){
 	int BUCK_PWM_PERIOD = 11520;
 
+	/* Configure HRTIM output */
 	static GPIO_InitTypeDef GPIO_InitStructure;
-
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA | RCC_AHBPeriph_GPIOB, ENABLE);
-
-	/* Configure HRTIM output: TA1 (PA8) */
 	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
 	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+
+	//init GPIO A pin 8 (TA1)
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8;
 	GPIO_Init(GPIOA, &GPIO_InitStructure);
 	/* Alternate function configuration : HRTIM TA1 (PA8) */
 	GPIO_PinAFConfig(GPIOA, GPIO_PinSource8, GPIO_AF_13);
 
-	/* Configure HRTIM output: TA2 (PA9) */
+	//init GPIO A pin 9 (TA2)
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
 	GPIO_Init(GPIOA, &GPIO_InitStructure);
 	/* Alternate function configuration : HRTIM TA2 (PA9) */
 	GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_13);
 
-	// Init hrtim
-
-
+	//create setup structures
 	HRTIM_OutputCfgTypeDef HRTIM_TIM_OutputStructure;
 	HRTIM_BaseInitTypeDef HRTIM_BaseInitStructure;
 	HRTIM_TimerInitTypeDef HRTIM_TimerInitStructure;
 	HRTIM_TimerCfgTypeDef HRTIM_TimerWaveStructure;
-	HRTIM_CompareCfgTypeDef HRTIM_CompareStructure;
 
 	/* ----------------------------*/
 	/* HRTIM Global initialization */
@@ -123,46 +120,38 @@ void hrtimInit(void){
 	/* TA1 and TA2 waveform description */
 	/* -------------------------------- */
 	/* PWM on TA1, protected by Fault input */
+	// create general outputStructure
 	HRTIM_TIM_OutputStructure.Polarity = HRTIM_OUTPUTPOLARITY_HIGH;
-	HRTIM_TIM_OutputStructure.SetSource = HRTIM_OUTPUTSET_TIMPER;
-	HRTIM_TIM_OutputStructure.ResetSource = HRTIM_OUTPUTRESET_TIMCMP1;
 	HRTIM_TIM_OutputStructure.IdleMode = HRTIM_OUTPUTIDLEMODE_NONE;
 	HRTIM_TIM_OutputStructure.IdleState = HRTIM_OUTPUTIDLESTATE_INACTIVE;
 	HRTIM_TIM_OutputStructure.FaultState = HRTIM_OUTPUTFAULTSTATE_INACTIVE;
 	HRTIM_TIM_OutputStructure.ChopperModeEnable = HRTIM_OUTPUTCHOPPERMODE_DISABLED;
 	HRTIM_TIM_OutputStructure.BurstModeEntryDelayed = HRTIM_OUTPUTBURSTMODEENTRY_REGULAR;
+
+	// change specific setting + use general outputStructure for both TA1
+	HRTIM_TIM_OutputStructure.SetSource = HRTIM_OUTPUTSET_TIMPER;			//rising edge pwm
+	HRTIM_TIM_OutputStructure.ResetSource = HRTIM_OUTPUTRESET_TIMCMP1;		//falling edge pwm
 	HRTIM_WaveformOutputConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_OUTPUT_TA1, &HRTIM_TIM_OutputStructure);
 
-	/* -------------------------------- */
-	/* TA1 and TA2 waveform description */
-	/* -------------------------------- */
-	/* PWM on TA1, protected by Fault input */
-	HRTIM_TIM_OutputStructure.Polarity = HRTIM_OUTPUTPOLARITY_HIGH;
-	HRTIM_TIM_OutputStructure.SetSource = HRTIM_OUTPUTSET_TIMPER;
-	HRTIM_TIM_OutputStructure.ResetSource = HRTIM_OUTPUTRESET_TIMCMP1;
-	HRTIM_TIM_OutputStructure.IdleMode = HRTIM_OUTPUTIDLEMODE_NONE;
-	HRTIM_TIM_OutputStructure.IdleState = HRTIM_OUTPUTIDLESTATE_INACTIVE;
-	HRTIM_TIM_OutputStructure.FaultState = HRTIM_OUTPUTFAULTSTATE_INACTIVE;
-	HRTIM_TIM_OutputStructure.ChopperModeEnable = HRTIM_OUTPUTCHOPPERMODE_DISABLED;
-	HRTIM_TIM_OutputStructure.BurstModeEntryDelayed = HRTIM_OUTPUTBURSTMODEENTRY_REGULAR;
-	HRTIM_WaveformOutputConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_OUTPUT_TD1, &HRTIM_TIM_OutputStructure);
+	// change specific setting + use general outputStructure for both TA2
+	HRTIM_TIM_OutputStructure.SetSource = HRTIM_OUTPUTSET_TIMCMP2;			//rising edge pwm
+	HRTIM_TIM_OutputStructure.ResetSource = HRTIM_OUTPUTRESET_TIMCMP3;		//falling edge pwm
+	HRTIM_WaveformOutputConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_OUTPUT_TA2, &HRTIM_TIM_OutputStructure);
 
-	/* Set compare registers for duty cycle on TA1 */
+	/* Set compare registers for duty cycle */
+	HRTIM_CompareCfgTypeDef HRTIM_CompareStructure;
 	HRTIM_CompareStructure.AutoDelayedMode = HRTIM_AUTODELAYEDMODE_REGULAR;
 	HRTIM_CompareStructure.AutoDelayedTimeout = 0;
-	HRTIM_CompareStructure.CompareValue = BUCK_PWM_PERIOD/10;     /* 5% duty cycle */
+
+	HRTIM_CompareStructure.CompareValue = BUCK_PWM_PERIOD/4;
 	HRTIM_WaveformCompareConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, &HRTIM_CompareStructure);
 
-
-
-	/* --------------------------*/
-	/* ADC trigger initialization */
-	/* --------------------------*/
-	/* Set compare 3 registers for ADC trigger */
-	HRTIM_CompareStructure.AutoDelayedMode = HRTIM_AUTODELAYEDMODE_REGULAR;
-	HRTIM_CompareStructure.AutoDelayedTimeout = 0;
-	HRTIM_CompareStructure.CompareValue = BUCK_PWM_PERIOD/10; /* samples in middle of duty cycle */
+	HRTIM_CompareStructure.CompareValue = BUCK_PWM_PERIOD/2;
 	HRTIM_WaveformCompareConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_2, &HRTIM_CompareStructure);
+
+	HRTIM_CompareStructure.CompareValue = 3*BUCK_PWM_PERIOD/4;
+	HRTIM_WaveformCompareConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_3, &HRTIM_CompareStructure);
+
 
 
 	/* ---------------*/
