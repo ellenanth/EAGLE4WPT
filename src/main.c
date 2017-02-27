@@ -15,49 +15,75 @@
 
 int main(void)
 {
-	//enable clock
-	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+//	//init necessary pins
+//	initPin();
 
-	//setup GPIO A pin 5
-	GPIO_InitTypeDef gpioInit;
-	gpioInit.GPIO_Pin = GPIO_Pin_5;
-	gpioInit.GPIO_Mode = GPIO_Mode_OUT;
-	gpioInit.GPIO_Speed = GPIO_Speed_Level_3;
-	gpioInit.GPIO_OType = GPIO_OType_PP;
+	//initialize all necessary pins
+	initPins();
 
-	GPIO_Init(GPIOA,&gpioInit);
-	GPIO_SetBits(GPIOA,GPIO_Pin_5);
+	//enable driver
+	//TODO check if works
+	GPIO_SetBits(GPIOA, GPIO_Pin_10);
+
 
 	//init high resolution timer
-	hrtimInit();
+	initHighResTimer(70000, 500);
 
 	for(;;){
 	}
 }
 
+////helper function to initialize the used pins
+//void initPin() {
+//	//enable clock on GPIO A
+//	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+//
+//	//create an init struct for GPIO A pin 5
+//	GPIO_InitTypeDef gpioInit;
+//	gpioInit.GPIO_Pin = GPIO_Pin_5;
+//	gpioInit.GPIO_Mode = GPIO_Mode_OUT;
+//	gpioInit.GPIO_Speed = GPIO_Speed_Level_3;
+//	gpioInit.GPIO_OType = GPIO_OType_PP;
+//
+//	//use init struct for GPIO A pin 5
+//	GPIO_Init(GPIOA,&gpioInit);
+//	GPIO_SetBits(GPIOA,GPIO_Pin_5);
+//}
+
 //helper function to initialize the high resolution timer
-void hrtimInit(void){
-	int BUCK_PWM_PERIOD = 11520;
+/**
+ * @param	frequency: between 18kHz en 200kHz
+ * @param	duty_cycle: between 0 and 1000
+ */
+void initHighResTimer(int frequency, int duty_cycle){
+	// duty_cycle: tussen 0 en 1000
+	// !!! laagste frequentie 18 kHz, hoogste +- 200 kHz (door niets aan de prescaler te veranderen) !!!
+	// max periode: +- 65000 ?
+	int PERIOD_MAX = 65000;
+	uint32_t prescaler = HRTIM_PRESCALERRATIO_MUL8;
+	int BUCK_PWM_PERIOD = 2*72000000*8/frequency; // 2*72M minimale frequentie, 8 komt van prescaler
+	int puls_period = duty_cycle*BUCK_PWM_PERIOD/2000;
 
-	/* Configure HRTIM output */
-	static GPIO_InitTypeDef GPIO_InitStructure;
-	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA | RCC_AHBPeriph_GPIOB, ENABLE);
-	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
-	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
 
-	//init GPIO A pin 8 (TA1)
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8;
-	GPIO_Init(GPIOA, &GPIO_InitStructure);
-	/* Alternate function configuration : HRTIM TA1 (PA8) */
-	GPIO_PinAFConfig(GPIOA, GPIO_PinSource8, GPIO_AF_13);
-
-	//init GPIO A pin 9 (TA2)
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
-	GPIO_Init(GPIOA, &GPIO_InitStructure);
-	/* Alternate function configuration : HRTIM TA2 (PA9) */
-	GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_13);
+//	/* Configure HRTIM output */
+//	static GPIO_InitTypeDef GPIO_InitStructure;
+//	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA | RCC_AHBPeriph_GPIOB, ENABLE);
+//	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+//	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+//	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+//	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+//
+//	//init GPIO A pin 8 (TA1)
+//	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8;
+//	GPIO_Init(GPIOA, &GPIO_InitStructure);
+//	/* Alternate function configuration : HRTIM TA1 (PA8) */
+//	GPIO_PinAFConfig(GPIOA, GPIO_PinSource8, GPIO_AF_13);
+//
+//	//init GPIO A pin 9 (TA2)
+//	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
+//	GPIO_Init(GPIOA, &GPIO_InitStructure);
+//	/* Alternate function configuration : HRTIM TA2 (PA9) */
+//	GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_13);
 
 	//create setup structures
 	HRTIM_OutputCfgTypeDef HRTIM_TIM_OutputStructure;
@@ -95,7 +121,7 @@ void hrtimInit(void){
 
 	HRTIM_BaseInitStructure.Period = BUCK_PWM_PERIOD; /* 400kHz switching frequency */
 	HRTIM_BaseInitStructure.RepetitionCounter = 127;   /* 1 ISR every 128 PWM periods */
-	HRTIM_BaseInitStructure.PrescalerRatio = HRTIM_PRESCALERRATIO_MUL32;
+	HRTIM_BaseInitStructure.PrescalerRatio = prescaler;
 	HRTIM_BaseInitStructure.Mode = HRTIM_MODE_CONTINOUS;
 
 	HRTIM_Waveform_Init(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, &HRTIM_BaseInitStructure, &HRTIM_TimerInitStructure);
@@ -128,12 +154,12 @@ void hrtimInit(void){
 	HRTIM_TIM_OutputStructure.ChopperModeEnable = HRTIM_OUTPUTCHOPPERMODE_DISABLED;
 	HRTIM_TIM_OutputStructure.BurstModeEntryDelayed = HRTIM_OUTPUTBURSTMODEENTRY_REGULAR;
 
-	// change specific setting + use general outputStructure for both TA1
+	// change specific settings + use general outputStructure for TA1
 	HRTIM_TIM_OutputStructure.SetSource = HRTIM_OUTPUTSET_TIMPER;			//rising edge pwm
 	HRTIM_TIM_OutputStructure.ResetSource = HRTIM_OUTPUTRESET_TIMCMP1;		//falling edge pwm
 	HRTIM_WaveformOutputConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_OUTPUT_TA1, &HRTIM_TIM_OutputStructure);
 
-	// change specific setting + use general outputStructure for both TA2
+	// change specific settings + use general outputStructure for TA2
 	HRTIM_TIM_OutputStructure.SetSource = HRTIM_OUTPUTSET_TIMCMP2;			//rising edge pwm
 	HRTIM_TIM_OutputStructure.ResetSource = HRTIM_OUTPUTRESET_TIMCMP3;		//falling edge pwm
 	HRTIM_WaveformOutputConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_OUTPUT_TA2, &HRTIM_TIM_OutputStructure);
@@ -143,13 +169,13 @@ void hrtimInit(void){
 	HRTIM_CompareStructure.AutoDelayedMode = HRTIM_AUTODELAYEDMODE_REGULAR;
 	HRTIM_CompareStructure.AutoDelayedTimeout = 0;
 
-	HRTIM_CompareStructure.CompareValue = BUCK_PWM_PERIOD/4;
+	HRTIM_CompareStructure.CompareValue = puls_period; // BUCK_PWM_PERIOD/4;
 	HRTIM_WaveformCompareConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_1, &HRTIM_CompareStructure);
 
 	HRTIM_CompareStructure.CompareValue = BUCK_PWM_PERIOD/2;
 	HRTIM_WaveformCompareConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_2, &HRTIM_CompareStructure);
 
-	HRTIM_CompareStructure.CompareValue = 3*BUCK_PWM_PERIOD/4;
+	HRTIM_CompareStructure.CompareValue = BUCK_PWM_PERIOD/2 + puls_period;
 	HRTIM_WaveformCompareConfig(HRTIM1, HRTIM_TIMERINDEX_TIMER_A, HRTIM_COMPAREUNIT_3, &HRTIM_CompareStructure);
 
 
@@ -164,4 +190,100 @@ void hrtimInit(void){
 	/* Start HRTIM's TIMER A */
 	HRTIM_WaveformCounterStart(HRTIM1, HRTIM_TIMERID_TIMER_A);
 
+}
+
+void initPins() {
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA | RCC_AHBPeriph_GPIOB | RCC_AHBPeriph_GPIOC | RCC_AHBPeriph_GPIOD, ENABLE); // gewoon nodig, anders werkt het niet
+
+	// driver IN1A en IN1B (PA8) en IN2A en IN2B (PA9)
+	// PA8
+	static GPIO_InitTypeDef GPIO_IN1;
+	GPIO_IN1.GPIO_PuPd = GPIO_PuPd_NOPULL;
+	GPIO_IN1.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_IN1.GPIO_Mode = GPIO_Mode_AF;
+	GPIO_IN1.GPIO_OType = GPIO_OType_PP;
+	GPIO_IN1.GPIO_Pin = GPIO_Pin_8;
+	GPIO_Init(GPIOA, &GPIO_IN1);
+	GPIO_PinAFConfig(GPIOA, GPIO_PinSource8, GPIO_AF_13); // Alternate function configuration : HRTIM TA1 (PA8)
+	// PA9
+	GPIO_IN1.GPIO_Pin = GPIO_Pin_9;
+	GPIO_Init(GPIOA, &GPIO_IN1);
+	GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_13); // Alternate function configuration : HRTIM TA2 (PA9)
+
+	// driver ENA, ENB, OCDA en OCDB
+	// PA10
+	static GPIO_InitTypeDef GPIO_EN;
+	GPIO_EN.GPIO_Speed = GPIO_Speed_Level_3;
+	GPIO_EN.GPIO_Mode = GPIO_Mode_OUT;
+	GPIO_EN.GPIO_OType = GPIO_OType_PP;
+	GPIO_EN.GPIO_Pin = GPIO_Pin_10;
+	GPIO_Init(GPIOA, &GPIO_EN);
+
+
+	// transformator middelste pin spanning weerstanden
+	// PA5
+	static GPIO_InitTypeDef GPIO_TR_R;
+	GPIO_TR_R.GPIO_Speed = GPIO_Speed_Level_3;
+	GPIO_TR_R.GPIO_Mode = GPIO_Mode_OUT;
+	GPIO_TR_R.GPIO_OType = GPIO_OType_PP;
+	GPIO_TR_R.GPIO_Pin = GPIO_Pin_5;
+	GPIO_Init(GPIOA, &GPIO_TR_R);
+	GPIO_SetBits(GPIOA, GPIO_Pin_5);
+
+	// transformator analoge pinnen over de weerstand
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_ADC12, ENABLE);
+	// PA0 en PA1
+	static GPIO_InitTypeDef GPIO_TR_An;
+	GPIO_TR_An.GPIO_Speed = GPIO_Speed_Level_3;
+	GPIO_TR_An.GPIO_Mode = GPIO_Mode_AN;
+	GPIO_TR_An.GPIO_OType = GPIO_PuPd_NOPULL;
+	GPIO_TR_An.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;
+	GPIO_Init(GPIOA, &GPIO_TR_An);
+	ADC_InitTypeDef ADC_InitStructure;
+	ADC_StructInit(&ADC_InitStructure);
+//	/* Calibration procedure */
+//	ADC_VoltageRegulatorCmd(ADC1, ENABLE);
+//	Delay(10); // Insert delay equal to 10 µs
+//	ADC_SelectCalibrationMode(ADC1, ADC_CalibrationMode_Differential);
+//	ADC_StartCalibration(ADC1);
+//	while(ADC_GetCalibrationStatus(ADC1) != RESET );
+//	uint32_t calibration_value = 0;
+//	calibration_value = ADC_GetCalibrationValue(ADC1);
+//	ADC_CommonInitTypeDef ADC_CommonInitStructure;
+//	ADC_CommonInitStructure.ADC_Mode = ADC_Mode_Independent;
+//	ADC_CommonInitStructure.ADC_Clock = ADC_Clock_AsynClkMode;
+//	ADC_CommonInitStructure.ADC_DMAAccessMode = ADC_DMAAccessMode_Disabled;
+//	ADC_CommonInitStructure.ADC_DMAMode = ADC_DMAMode_OneShot;
+//	ADC_CommonInitStructure.ADC_TwoSamplingDelay = 0;
+//	ADC_CommonInit(ADC1, &ADC_CommonInitStructure);
+//	ADC_InitStructure.ADC_ContinuousConvMode = ADC_ContinuousConvMode_Enable;
+//	ADC_InitStructure.ADC_Resolution = ADC_Resolution_12b;
+//	ADC_InitStructure.ADC_ExternalTrigConvEvent = ADC_ExternalTrigConvEvent_0;
+//	ADC_InitStructure.ADC_ExternalTrigEventEdge = ADC_ExternalTrigEventEdge_None;
+//	ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
+//	ADC_InitStructure.ADC_OverrunMode = ADC_OverrunMode_Disable;
+//	ADC_InitStructure.ADC_AutoInjMode = ADC_AutoInjec_Disable;
+//	ADC_InitStructure.ADC_NbrOfRegChannel = 1;
+//	ADC_Init(ADC1, &ADC_InitStructure);
+//	/* ADC1 regular channel7 and channel8 configuration */
+//	ADC_RegularChannelConfig(ADC1, ADC_Channel_7, 1, ADC_SampleTime_7Cycles5);
+//	ADC_RegularChannelConfig(ADC1, ADC_Channel_8, 2, ADC_SampleTime_7Cycles5);
+//	/* Select the differetiel mode for Channel 7 */
+//	ADC_SelectDifferentialMode(ADC1, ADC_Channel_7, ENABLE);
+//	/* Enable ADC1 */
+//	ADC_Cmd(ADC1, ENABLE);
+//	/* wait for ADRDY */
+//	while(!ADC_GetFlagStatus(ADC1, ADC_FLAG_RDY));
+//	/* Start ADC1 Software Conversion */
+//	ADC_StartConversion(ADC1);
+
+
+	// de blauwe knop op de Nucleo
+	// PC13
+	static GPIO_InitTypeDef GPIO_knop;
+	GPIO_knop.GPIO_Speed = GPIO_Speed_Level_3;
+	GPIO_knop.GPIO_Mode = GPIO_Mode_IN;
+	GPIO_knop.GPIO_OType = GPIO_OType_PP;
+	GPIO_knop.GPIO_Pin = GPIO_Pin_13;
+	GPIO_Init(GPIOC, &GPIO_knop);
 }
