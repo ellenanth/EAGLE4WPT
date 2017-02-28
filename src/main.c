@@ -15,43 +15,23 @@
 
 int main(void)
 {
-//	//init necessary pins
-//	initPin();
-
 	//initialize all necessary pins
 	initPins();
 
-	//enable driver
-	//TODO check if works
+	//enable H-bridge driver
+	//TODO integration on drone
 	GPIO_SetBits(GPIOA, GPIO_Pin_10);
 
 
 	//init high resolution timer
-	initHighResTimer(70000, 500);
+	initHighResTimer(70000, 900);
 
 	for(;;){
 	}
 }
 
-////helper function to initialize the used pins
-//void initPin() {
-//	//enable clock on GPIO A
-//	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
-//
-//	//create an init struct for GPIO A pin 5
-//	GPIO_InitTypeDef gpioInit;
-//	gpioInit.GPIO_Pin = GPIO_Pin_5;
-//	gpioInit.GPIO_Mode = GPIO_Mode_OUT;
-//	gpioInit.GPIO_Speed = GPIO_Speed_Level_3;
-//	gpioInit.GPIO_OType = GPIO_OType_PP;
-//
-//	//use init struct for GPIO A pin 5
-//	GPIO_Init(GPIOA,&gpioInit);
-//	GPIO_SetBits(GPIOA,GPIO_Pin_5);
-//}
-
-//helper function to initialize the high resolution timer
 /**
+ * Helper function to initialize the high resolution timer.
  * @param	frequency: between 18kHz en 200kHz
  * @param	duty_cycle: between 0 and 1000
  */
@@ -63,27 +43,6 @@ void initHighResTimer(int frequency, int duty_cycle){
 	uint32_t prescaler = HRTIM_PRESCALERRATIO_MUL8;
 	int BUCK_PWM_PERIOD = 2*72000000*8/frequency; // 2*72M minimale frequentie, 8 komt van prescaler
 	int puls_period = duty_cycle*BUCK_PWM_PERIOD/2000;
-
-
-//	/* Configure HRTIM output */
-//	static GPIO_InitTypeDef GPIO_InitStructure;
-//	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA | RCC_AHBPeriph_GPIOB, ENABLE);
-//	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-//	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-//	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
-//	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-//
-//	//init GPIO A pin 8 (TA1)
-//	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8;
-//	GPIO_Init(GPIOA, &GPIO_InitStructure);
-//	/* Alternate function configuration : HRTIM TA1 (PA8) */
-//	GPIO_PinAFConfig(GPIOA, GPIO_PinSource8, GPIO_AF_13);
-//
-//	//init GPIO A pin 9 (TA2)
-//	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
-//	GPIO_Init(GPIOA, &GPIO_InitStructure);
-//	/* Alternate function configuration : HRTIM TA2 (PA9) */
-//	GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_13);
 
 	//create setup structures
 	HRTIM_OutputCfgTypeDef HRTIM_TIM_OutputStructure;
@@ -192,26 +151,34 @@ void initHighResTimer(int frequency, int duty_cycle){
 
 }
 
+/**
+ * Helper function to initialize all pins that are used in this application.
+ * PA8 -> IN1A and IN1B on H-bridge
+ * PA9 -> IN2A and IN2B on H-bridge
+ * PA10 -> ENA, ENB, OCDA and OCDB on H-bridge
+ * PA5 -> reference pin current transformer
+ */
 void initPins() {
-	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA | RCC_AHBPeriph_GPIOB | RCC_AHBPeriph_GPIOC | RCC_AHBPeriph_GPIOD, ENABLE); // gewoon nodig, anders werkt het niet
+	// enable clock for all GPIO's
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA | RCC_AHBPeriph_GPIOB | RCC_AHBPeriph_GPIOC | RCC_AHBPeriph_GPIOD, ENABLE);
 
-	// driver IN1A en IN1B (PA8) en IN2A en IN2B (PA9)
-	// PA8
-	static GPIO_InitTypeDef GPIO_IN1;
-	GPIO_IN1.GPIO_PuPd = GPIO_PuPd_NOPULL;
-	GPIO_IN1.GPIO_Speed = GPIO_Speed_50MHz;
-	GPIO_IN1.GPIO_Mode = GPIO_Mode_AF;
-	GPIO_IN1.GPIO_OType = GPIO_OType_PP;
-	GPIO_IN1.GPIO_Pin = GPIO_Pin_8;
-	GPIO_Init(GPIOA, &GPIO_IN1);
+	// PA8 and PA9 (IN1A and IN1B on H-bridge, IN2A and IN2B on H-bridge)
+	// general
+	static GPIO_InitTypeDef GPIO_IN;
+	GPIO_IN.GPIO_PuPd = GPIO_PuPd_NOPULL;
+	GPIO_IN.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_IN.GPIO_Mode = GPIO_Mode_AF;
+	GPIO_IN.GPIO_OType = GPIO_OType_PP;
+	// PA8-specific
+	GPIO_IN.GPIO_Pin = GPIO_Pin_8;
+	GPIO_Init(GPIOA, &GPIO_IN);
 	GPIO_PinAFConfig(GPIOA, GPIO_PinSource8, GPIO_AF_13); // Alternate function configuration : HRTIM TA1 (PA8)
-	// PA9
-	GPIO_IN1.GPIO_Pin = GPIO_Pin_9;
-	GPIO_Init(GPIOA, &GPIO_IN1);
+	// PA9-specific
+	GPIO_IN.GPIO_Pin = GPIO_Pin_9;
+	GPIO_Init(GPIOA, &GPIO_IN);
 	GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_13); // Alternate function configuration : HRTIM TA2 (PA9)
 
-	// driver ENA, ENB, OCDA en OCDB
-	// PA10
+	// PA10 (ENA, ENB, OCDA and OCDB on H-bridge)
 	static GPIO_InitTypeDef GPIO_EN;
 	GPIO_EN.GPIO_Speed = GPIO_Speed_Level_3;
 	GPIO_EN.GPIO_Mode = GPIO_Mode_OUT;
@@ -220,8 +187,7 @@ void initPins() {
 	GPIO_Init(GPIOA, &GPIO_EN);
 
 
-	// transformator middelste pin spanning weerstanden
-	// PA5
+	// PA5 (reference pin current transformer)
 	static GPIO_InitTypeDef GPIO_TR_R;
 	GPIO_TR_R.GPIO_Speed = GPIO_Speed_Level_3;
 	GPIO_TR_R.GPIO_Mode = GPIO_Mode_OUT;
