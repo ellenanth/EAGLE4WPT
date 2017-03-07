@@ -17,11 +17,14 @@
 #include "uart.h"
 
 
-#define DEFALT_FREQ 50000.0f
-#define DEFAULT_DUTY 0.15f
+#define DEFALT_FREQ 70000.0f
+#define DEFAULT_DUTY 0.10f
+#define MAX_ADC_I 1638.4f // 2 A => +- 2 V gemeten => gemeten waarde = 2/5*2^12 = 1638,4
 
 void hrtimInit(void);
 void hrtimSetFreqDuty(float freq, float duty);
+float f = 70000.0f;
+float d = 0.10f;
 
 
 int main(void)
@@ -50,10 +53,40 @@ void HRTIM1_Master_IRQHandler(void){
 
 	HRTIM_ClearITPendingBit(HRTIM1,HRTIM_TIMERINDEX_MASTER, HRTIM_MASTER_IT_MREP);
 
+	// gemeten waarden, input voor controller
 	int16_t adc_0 = ADC_GetInjectedConversionValue(ADC1,1);
 	int16_t adc_90 = ADC_GetInjectedConversionValue(ADC1,2);
 
-	hrtimSetFreqDuty(50e3f, 0.1f);
+	//controller:
+	/*
+	 !!! let nog wel op hoe dat de draad door de transfo wordt gestoken !!!
+		 (zodat de gemeten spanning +- in fase is met de aangelegde en niet +- in tegenfase)
+	 adc = Acos(wt + phi)
+	 => adc_0 = Acos(phi) , adc_90 = Acos(90 + phi) = Asin(phi)
+	 => adc_90/adc_0 = Asin(phi)/Acos(phi) ~= phi
+
+	 bij phi > 0: stroom loopt voor op spanning => f te hoog
+	 bij phi < 0: stroom loopt achter op spanning => f te laag
+
+	 (adc = 100*i/100 ~= i)
+	 I_max = adc_0/cos(phi) ~= adc_0
+	 */
+
+	float phi = adc_90/adc_0;
+	float I_max = adc_0;
+
+	// phi P(ID)
+	float P = 1.0f;
+	int delta_f = -phi*P;
+	f += delta_f;
+
+	// I P(ID)
+	P = 1.0f;
+	int delta_d = I_max > 1.1*MAX_ADC_I ? 0.01 - d : (MAX_ADC_I - I_max)*P;
+	d += delta_d;
+
+	//use output controller to change frequency and duty cycle
+	hrtimSetFreqDuty(f, d);
 
 }
 
