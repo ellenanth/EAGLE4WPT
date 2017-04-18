@@ -1,5 +1,5 @@
 // UART.C
-// STM32F334 NUCLEO 
+// STM32F334 NUCLEO
 // Robin Theunis
 
 #include "uart.h"

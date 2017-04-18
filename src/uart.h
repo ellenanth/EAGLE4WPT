@@ -1,5 +1,5 @@
 // UART.H
-// STM32F334 NUCLEO 
+// STM32F334 NUCLEO
 // Robin Theunis
 
 #ifndef __UART_H

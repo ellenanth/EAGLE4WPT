@@ -24,7 +24,7 @@
 //
 //
 //	//init high resolution timer
-//	initHighResTimer(70000, 900);
+//	initHighResTimer(70000, 500);
 //
 //	for(;;){
 //	}

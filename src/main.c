@@ -17,25 +17,27 @@
 #include "uart.h"
 
 
-#define DEFALT_FREQ 70000.0f
-#define DEFAULT_DUTY 0.10f
+#define DEFAULT_FREQ 58000.0f
+#define DEFAULT_DUTY 0.25f
 #define MAX_ADC_I 1638.4f // 2 A => +- 2 V gemeten => gemeten waarde = 2/5*2^12 = 1638,4
 
 void hrtimInit(void);
 void hrtimSetFreqDuty(float freq, float duty);
-float f = 70000.0f;
-float d = 0.10f;
+float f = DEFAULT_FREQ;
+float d = DEFAULT_DUTY;
 
 
 int main(void)
 {
 
-	uartInit(115200);
+//	uartInit(115200);
+
+	initPins();
 
 	adcInit();
 
 	hrtimInit();
-	hrtimSetFreqDuty(50e3f, 0.1f);
+	hrtimSetFreqDuty(DEFAULT_FREQ, DEFAULT_DUTY);
 
 	printf("Starting WPT\r\n");
 
@@ -57,37 +59,38 @@ void HRTIM1_Master_IRQHandler(void){
 	int16_t adc_0 = ADC_GetInjectedConversionValue(ADC1,1);
 	int16_t adc_90 = ADC_GetInjectedConversionValue(ADC1,2);
 
-	//controller:
-	/*
-	 !!! let nog wel op hoe dat de draad door de transfo wordt gestoken !!!
-		 (zodat de gemeten spanning +- in fase is met de aangelegde en niet +- in tegenfase)
-	 adc = Acos(wt + phi)
-	 => adc_0 = Acos(phi) , adc_90 = Acos(90 + phi) = Asin(phi)
-	 => adc_90/adc_0 = Asin(phi)/Acos(phi) ~= phi
 
-	 bij phi > 0: stroom loopt voor op spanning => f te hoog
-	 bij phi < 0: stroom loopt achter op spanning => f te laag
-
-	 (adc = 100*i/100 ~= i)
-	 I_max = adc_0/cos(phi) ~= adc_0
-	 */
-
-	float phi = adc_90/adc_0;
-	float I_max = adc_0;
-
-	// phi P(ID)
-	float P = 1.0f;
-	int delta_f = -phi*P;
-	f += delta_f;
-
-	// I P(ID)
-	P = 1.0f;
-	int delta_d = I_max > 1.1*MAX_ADC_I ? 0.01 - d : (MAX_ADC_I - I_max)*P;
-	d += delta_d;
-
+//	//controller:
+//	/*
+//	 !!! let nog wel op hoe dat de draad door de transfo wordt gestoken !!!
+//		 (zodat de gemeten spanning +- in fase is met de aangelegde en niet +- in tegenfase)
+//	 adc = Acos(wt + phi)
+//	 => adc_0 = Acos(phi) , adc_90 = Acos(90 + phi) = Asin(phi)
+//	 => adc_90/adc_0 = Asin(phi)/Acos(phi) ~= phi
+//
+//	 bij phi > 0: stroom loopt voor op spanning => f te hoog
+//	 bij phi < 0: stroom loopt achter op spanning => f te laag
+//
+//	 (adc = 100*i/100 ~= i)
+//	 I_max = adc_0/cos(phi) ~= adc_0
+//	 */
+//
+//
+//	float phi = adc_90/adc_0;
+//	float I_max = adc_0;
+//
+////	// phi P(ID)
+////	float P = 100.0f;
+////	int delta_f = -phi*P;
+////	f += delta_f;
+//
+//	// I P(ID)
+////	P = 1.0f;
+////	int delta_d = I_max > 1.1*MAX_ADC_I ? 0.01 - d : (MAX_ADC_I - I_max)*P;
+////	d += delta_d;
+//
 	//use output controller to change frequency and duty cycle
-	hrtimSetFreqDuty(f, d);
-
+	hrtimSetFreqDuty(adc_0 == 0 ? 30000 : 40000, DEFAULT_DUTY);
 }
 
 
@@ -182,7 +185,7 @@ void hrtimInit(void){
 	GPIO_Init(GPIOA, &GpioInitStruct);
 	GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_13); // Alternate function configuration : HRTIM TA2 (PA9)
 
-	int PWM_PERIOD = 2.0f*72000000.0f*8.0f/DEFALT_FREQ;
+	int PWM_PERIOD = 2.0f*72000000.0f*8.0f/DEFAULT_FREQ;
 	int PULSE_PERIOD = DEFAULT_DUTY*PWM_PERIOD;
 
 	//create setup structures
@@ -339,4 +342,33 @@ void hrtimSetFreqDuty(float freq, float duty){
 
 	// HRTIM1 -> TIMER A -> PERIOD REGISTER
 	HRTIM1->HRTIM_MASTER.MPER = PWM_PERIOD;
+}
+
+/**
+ * Helper function to initialize pins that have to be 1 during all the application.
+ * PA10 -> ENA, ENB, OCDA and OCDB on H-bridge
+ * PA5 -> reference pin current transformer
+ */
+void initPins(void) {
+	// enable clock for all GPIO's
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+
+	// PA10 (ENA, ENB, OCDA and OCDB on H-bridge)
+	static GPIO_InitTypeDef GPIO_EN;
+	GPIO_EN.GPIO_Speed = GPIO_Speed_Level_3;
+	GPIO_EN.GPIO_Mode = GPIO_Mode_OUT;
+	GPIO_EN.GPIO_OType = GPIO_OType_PP;
+	GPIO_EN.GPIO_Pin = GPIO_Pin_10;
+	GPIO_Init(GPIOA, &GPIO_EN);
+	GPIO_SetBits(GPIOA, GPIO_Pin_10);
+
+
+	// PA5 (reference pin current transformer)
+	static GPIO_InitTypeDef GPIO_TR_R;
+	GPIO_TR_R.GPIO_Speed = GPIO_Speed_Level_3;
+	GPIO_TR_R.GPIO_Mode = GPIO_Mode_OUT;
+	GPIO_TR_R.GPIO_OType = GPIO_OType_PP;
+	GPIO_TR_R.GPIO_Pin = GPIO_Pin_5;
+	GPIO_Init(GPIOA, &GPIO_TR_R);
+	GPIO_SetBits(GPIOA, GPIO_Pin_5);
 }
